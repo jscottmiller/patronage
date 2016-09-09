@@ -1,283 +1,140 @@
+import {assertThrows} from './helpers.js';
+
 contract('PatronageRegistry', function(accounts) {
-  it("should not allow default sends", function() {
-    var registry = PatronageRegistry.deployed();
-    var failed = false;
-    var registrar;
-    var startingBalance;
-    
-    return registry.registrar().then(function(_registrar) {
-      registrar = _registrar;
-      var other = accounts.find(function(a) { return a != registrar });
-      return web3.eth.getBalance(registrar);
-    }).then(function(balance) {
-      startingBalance = balance;
-      return web3.eth.sendTransaction({from: patron, to: address, value: donationAmount});
-    }).catch(function(e) {
-      failed = true;
-    }).then(function() {
-      assert.isTrue(failed);
-      return web3.eth.getBalance(registrar);
-    }).then(function(balance) {
-      assert.equal(startingBalance.toString(), balance.toString());
+  it("should not allow default sends", async function() {
+    const registry = PatronageRegistry.deployed();
+    const registrar = await registry.registrar();
+    const other = accounts.find(function(a) { return a != registrar });
+    const startingBalance = web3.eth.getBalance(registrar);
+    assertThrows(async () => {
+      await web3.eth.sendTransaction({from: patron, to: address, value: donationAmount});
+    });
+    const endingBalance = await web3.eth.getBalance(registrar);
+    assert.equal(startingBalance.toString(), endingBalance.toString());
+  });
+
+  it("should allow the registrar to update registrar", async function() {
+    const registry = PatronageRegistry.deployed();
+    const originalRegistrar = await registry.registrar();
+    const newRegistrar = accounts.find(function(a) { return a != originalRegistrar });
+    await registry.updateRegistrar(newRegistrar, {from: originalRegistrar});
+    assert.equal(newRegistrar, await registry.registrar());
+  });
+
+  it("shouldn't allow others to update the registrar", async function() {
+    const registry = PatronageRegistry.deployed();
+    const originalRegistrar = await registry.registrar();
+    const newRegistrar = accounts.find(function(a) { return a != originalRegistrar });
+    assertThrows(async () => {
+      await registry.updateRegistrar(newRegistrar, {from: newRegistrar});
+    });
+    assert.equal(originalRegistrar, await registry.registrar());
+  });
+
+  it("should allow the registrar to register a new name", async function() {
+    const registry = PatronageRegistry.deployed();
+    const username = 'user' + Math.floor(10000 * Math.random());
+    const registrar = await registry.registrar();
+    const payoutAddress = accounts.find(function(a) { return a != registrar; });
+    await registry.registerUsername(username, payoutAddress, {from: registrar});
+    const contractAddress = await registry.patronageContractForUsername.call(username);
+    const patronage = Patronage.at(contractAddress);
+    assert.equal(payoutAddress, await patronage.payoutAddress());
+  });
+
+  it("shouldn't allow a non-registrar to register a name", async function() {
+    const registry = PatronageRegistry.deployed();
+    const username = 'user' + Math.floor(10000 * Math.random());
+    const registrar = await registry.registrar();
+    const other = accounts.find(function(a) { return a != registrar });
+    assertThrows(async () => {
+      await registry.registerUsername(username, other, {from: other});
     });
   });
 
-  it("should allow the registrar to update registrar", function() {
-    var registry = PatronageRegistry.deployed();
-
-    var originalRegistrar;
-    var newRegistrar;
-
-    return registry.registrar().then(function(registrar) {
-      originalRegistrar = registrar;
-      newRegistrar = accounts.find(function(a) { return a != registrar });
-      return registry.updateRegistrar(newRegistrar, {from: originalRegistrar});
-    }).then(function() {
-      return registry.registrar();
-    }).then(function(registrar) {
-      assert.equal(registrar, newRegistrar);
+  it("shouldn't allow the same name to be registered twice", async function() {
+    const registry = PatronageRegistry.deployed();
+    const username = 'user' + Math.floor(10000 * Math.random());
+    const registrar = await registry.registrar();
+    const payoutAddress = accounts.find(function(a) { return a != registrar; });
+    await registry.registerUsername(username, payoutAddress, {from: registrar});
+    const patronageAddress = await registry.patronageContractForUsername.call(username);
+    const patronage = Patronage.at(patronageAddress);
+    assert.equal(payoutAddress, await patronage.payoutAddress());
+    const other = accounts.find(function(a) { return [registrar, payoutAddress].indexOf(a) == -1; });
+    assertThrows(async () => {
+      await registry.registerUsername(username, other, {from: registrar});
     });
+    assert.equal(payoutAddress, await patronage.payoutAddress());
   });
 
-  it("shouldn't allow others to update the registrar", function() {
-    var registry = PatronageRegistry.deployed();
-
-    var originalRegistrar;
-    var newRegistrar;
-    var failed = false;
-
-    return registry.registrar().then(function(registrar) {
-      originalRegistrar = registrar;
-      newRegistrar = accounts.find(function(a) { return a != registrar });
-      return registry.updateRegistrar(newRegistrar, {from: newRegistrar});
-    }).catch(function(e) {
-      failed = true;
-    }).then(function() {
-      return registry.registrar();
-    }).then(function(registrar) {
-      assert.equal(registrar, originalRegistrar);
-      assert.isTrue(failed);
+  it("should allow patronage owners to update payout address", async function() {
+    const registry = PatronageRegistry.deployed();
+    const username = 'user' + Math.floor(10000 * Math.random());
+    const registrar = await registry.registrar();
+    const payoutAddress = accounts.find(function(a) { return a != registrar; });
+    await registry.registerUsername(username, payoutAddress, {from: registrar});
+    const patronageAddress = await registry.patronageContractForUsername.call(username);
+    const patronage = Patronage.at(patronageAddress);
+    assert.equal(payoutAddress, await patronage.payoutAddress());
+    const newPayoutAddress = accounts.find(function(a) { 
+      return [registrar, payoutAddress].indexOf(a) == -1;
     });
+    await patronage.updatePayoutAddress(newPayoutAddress, {from: payoutAddress});
+    assert.equal(newPayoutAddress, await patronage.payoutAddress());
   });
 
-  it("should allow the registrar to register a new name", function() {
-    var registry = PatronageRegistry.deployed();
-    var username = 'user' + Math.floor(10000 * Math.random());
-
-    var currentRegistrar;
-    var payoutAddress;
-
-    return registry.registrar().then(function(registrar) {
-      currentRegistrar = registrar;
-      payoutAddress = accounts.find(function(a) { return a != registrar; });
-      return registry.registerUsername(username, payoutAddress, {from: registrar});
-    }).then(function() {
-      return registry.patronageContractForUsername.call(username);
-    }).then(function(address) {
-      var patronage = Patronage.at(address);
-      return patronage.payoutAddress();
-    }).then(function(address) {
-      assert.equal(payoutAddress, address);
+  it("shouldn't allow others to update payout address", async function() {
+    const registry = PatronageRegistry.deployed();
+    const username = 'user' + Math.floor(10000 * Math.random());
+    const registrar = await registry.registrar();
+    const payoutAddress = accounts.find(function(a) { return a != registrar; });
+    await registry.registerUsername(username, payoutAddress, {from: registrar});
+    const patronageAddress = await registry.patronageContractForUsername.call(username);
+    const patronage = Patronage.at(patronageAddress);
+    assert.equal(payoutAddress, await patronage.payoutAddress());
+    const other = accounts.find(function(a) { 
+      return [registrar, payoutAddress].indexOf(a) == -1;
     });
+    assertThrows(async () => {
+      await patronage.updatePayoutAddress(other, {from: registrar});
+    });
+    assert.equal(payoutAddress, await patronage.payoutAddress());
   });
 
-  it("shouldn't allow a non-registrar to register a name", function() {
-    var registry = PatronageRegistry.deployed();
-    var username = 'user' + Math.floor(10000 * Math.random());
-    var failed = false;
-
-    return registry.registrar().then(function(registrar) {
-      var other = accounts.find(function(a) { return a != registrar });
-      return registry.registerUsername(username, other, {from: other});
-    }).then(function() {
-      return registry.patronageContractForUsername.call(username);
-    }).catch(function(e) {
-      failed = true;
-    }).then(function() {
-      assert.isTrue(failed);
-      return registry.patronageContractForUsername.call(username);
-    }).catch(function(e) {
-      failed = failed && true;
-    }).then(function() {
-      assert.isTrue(failed);
-    });
+  it("should not allow withdrawals if balance is zero", async function() {
+    const registry = PatronageRegistry.deployed();
+    const username = 'user' + Math.floor(10000 * Math.random());
+    const registrar =  await registry.registrar();
+    const payoutAddress = accounts.find(function(a) { return a != registrar; });
+    await registry.registerUsername(username, payoutAddress, {from: registrar});
+    const patronageAddress = await registry.patronageContractForUsername.call(username);
+    const patronage = Patronage.at(patronageAddress);
+    assertThrows(async () => patronage.withdrawal());
   });
 
-  it("shouldn't allow the same name to be registered twice", function() {
-    var registry = PatronageRegistry.deployed();
-    var username = 'user' + Math.floor(10000 * Math.random());
-
-    var currentRegistrar;
-    var payoutAddress;
-    var failed = false;
-
-    return registry.registrar().then(function(registrar) {
-      currentRegistrar = registrar;
-      payoutAddress = accounts.find(function(a) { return a != registrar; });
-      return registry.registerUsername(username, payoutAddress, {from: registrar});
-    }).then(function() {
-      return registry.patronageContractForUsername.call(username);
-    }).then(function(address) {
-      var patronage = Patronage.at(address);
-      return patronage.payoutAddress();
-    }).then(function(address) {
-      assert.equal(payoutAddress, address);
-    }).then(function() {
-      var other = accounts.find(function(a) { return [currentRegistrar, payoutAddress].indexOf(a) == -1; });
-      return registry.registerUsername(username, other, {from: registrar});
-    }).catch(function(e) {
-      failed = true;
-    }).then(function() {
-      assert.isTrue(failed);
-      return registry.patronageContractForUsername.call(username);
-    }).then(function(address) {
-      var patronage = Patronage.at(address);
-      return patronage.payoutAddress();
-    }).then(function(address) {
-      assert.equal(payoutAddress, address);
+  it("should pay balance to shareholders and owner", async function() {
+    const registry = PatronageRegistry.deployed();
+    const username = 'user' + Math.floor(10000 * Math.random());
+    const donationAmount = 10000;
+    const registrar = await registry.registrar();
+    const shareholders = await registry.shareholders();
+    const payoutAddress = accounts.find(function(a) { 
+      return a != registrar && a != shareholders; 
     });
-  });
-
-  it("should allow patronage owners to update payout address", function() {
-    var registry = PatronageRegistry.deployed();
-    var username = 'user' + Math.floor(10000 * Math.random());
-
-    var currentRegistrar;
-    var payoutAddress;
-    var newPayoutAddress;
-    var patronage;
-
-    return registry.registrar().then(function(registrar) {
-      currentRegistrar = registrar;
-      payoutAddress = accounts.find(function(a) { return a != registrar; });
-      return registry.registerUsername(username, payoutAddress, {from: registrar});
-    }).then(function() {
-      return registry.patronageContractForUsername.call(username);
-    }).then(function(address) {
-      patronage = Patronage.at(address);
-      return patronage.payoutAddress();
-    }).then(function(address) {
-      assert.equal(payoutAddress, address);
-      newPayoutAddress = accounts.find(function(a) { 
-        return [currentRegistrar, payoutAddress].indexOf(a) == -1;
-      });
-      return patronage.updatePayoutAddress(newPayoutAddress, {from: payoutAddress});
-    }).then(function() {
-      return patronage.payoutAddress();
-    }).then(function(address) {
-      assert.equal(newPayoutAddress, address);
+    const payoutBalance = await web3.eth.getBalance(payoutAddress);
+    const shareholderBalance = await web3.eth.getBalance(shareholders);
+    await registry.registerUsername(username, payoutAddress, {from: registrar});
+    const patronageAddress = await registry.patronageContractForUsername.call(username);
+    const patronage = Patronage.at(patronageAddress);
+    const patron = accounts.find(function(a) { 
+      return [registrar, payoutAddress, shareholders].indexOf(a) == -1; 
     });
-  });
-
-  it("shouldn't allow others to update payout address", function() {
-    var registry = PatronageRegistry.deployed();
-    var username = 'user' + Math.floor(10000 * Math.random());
-
-    var currentRegistrar;
-    var payoutAddress;
-    var patronage;
-    var failed = false;
-
-    return registry.registrar().then(function(registrar) {
-      currentRegistrar = registrar;
-      payoutAddress = accounts.find(function(a) { return a != registrar; });
-      return registry.registerUsername(username, payoutAddress, {from: registrar});
-    }).then(function() {
-      return registry.patronageContractForUsername.call(username);
-    }).then(function(address) {
-      patronage = Patronage.at(address);
-      return patronage.payoutAddress();
-    }).then(function(address) {
-      assert.equal(payoutAddress, address);
-      var other = accounts.find(function(a) { 
-        return [currentRegistrar, payoutAddress].indexOf(a) == -1;
-      });
-      return patronage.updatePayoutAddress(other, {from: currentRegistrar});
-    }).catch(function(e) {
-      failed = true;
-    }).then(function() {
-      assert.isTrue(failed);
-      return patronage.payoutAddress();
-    }).then(function(address) {
-      assert.equal(payoutAddress, address);
-    });
-  });
-
-  it("should not allow withdrawals if balance is zero", function() {
-    var registry = PatronageRegistry.deployed();
-    var username = 'user' + Math.floor(10000 * Math.random());
-
-    var currentRegistrar;
-    var payoutAddress;
-    var failed = false;
-
-    return registry.registrar().then(function(registrar) {
-      currentRegistrar = registrar;
-      payoutAddress = accounts.find(function(a) { return a != registrar; });
-      return registry.registerUsername(username, payoutAddress, {from: registrar});
-    }).then(function() {
-      return registry.patronageContractForUsername(username);
-    }).then(function(address) {
-      var patronage = Patronage.at(address);
-      return patronage.withdrawal();
-    }).catch(function(e) {
-      failed = true;
-    }).then(function() {
-      assert.isTrue(failed);
-    });
-  });
-
-  it("should pay balance to shareholders and owner", function() {
-    var registry = PatronageRegistry.deployed();
-    var username = 'user' + Math.floor(10000 * Math.random());
-    var donationAmount = 10000;
-
-    var patronage;
-    var patronageAddress;
-    var registrarAddress;
-    var shareholderAddress;
-    var payoutAddress;
-    var shareholderBalance;
-    var payoutBalance;
-
-    return registry.registrar().then(function(registrar) {
-      registrarAddress = registrar;
-      return registry.shareholders();
-    }).then(function(shareholders) {
-      shareholderAddress = shareholders;
-      payoutAddress = accounts.find(function(a) { return a != registrarAddress && a != shareholderAddress; });
-      return web3.eth.getBalance(payoutAddress);
-    }).then(function(balance) {
-      payoutBalance = balance;
-      return web3.eth.getBalance(shareholderAddress);
-    }).then(function(balance) {
-      shareholderBalance = balance;
-      return registry.registerUsername(username, payoutAddress, {from: registrarAddress});
-    }).then(function() {
-      return registry.patronageContractForUsername.call(username);
-    }).then(function(address) {
-      patronageAddress = address;
-      patronage = Patronage.at(patronageAddress);
-      var patron = accounts.find(function(a) { 
-        return [registrarAddress, payoutAddress, shareholderAddress].indexOf(a) == -1; 
-      });
-      return web3.eth.sendTransaction({from: patron, to: address, value: donationAmount});
-    }).then(function() {
-      return web3.eth.getBalance(patronageAddress);
-    }).then(function(balance) {
-      assert.equal(donationAmount, balance.toNumber());
-    }).then(function() {
-      return patronage.withdrawal({from: registrarAddress});
-    }).then(function() {
-      return web3.eth.getBalance(patronageAddress);
-    }).then(function(balance) {
-      assert.equal(0, balance.toNumber());
-      return web3.eth.getBalance(payoutAddress);
-    }).then(function(balance) {
-      assert.equal(payoutBalance.add(9000).toString(), balance.toString());
-      return web3.eth.getBalance(shareholderAddress);
-    }).then(function(balance) {
-      assert.equal(shareholderBalance.add(1000).toString(), balance.toString());
-    });
+    await web3.eth.sendTransaction({from: patron, to: patronageAddress, value: donationAmount});
+    assert.equal(donationAmount, web3.eth.getBalance(patronageAddress).toNumber());
+    await patronage.withdrawal({from: registrar});
+    assert.equal(0, web3.eth.getBalance(patronageAddress).toNumber());
+    assert.equal(payoutBalance.add(9000).toString(), web3.eth.getBalance(payoutAddress).toString());
+    assert.equal(shareholderBalance.add(1000).toString(), web3.eth.getBalance(shareholders).toString());
   });
 });
