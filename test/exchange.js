@@ -114,4 +114,47 @@ contract('Exchange', function(accounts) {
       assert.equal(expected.toString(), balance.toString());
     });
   })
+
+  function createTradingAccounts() {
+    var custodian = SimpleCustodian.deployed();
+    var sellerAccount = accounts[1];
+    var buyerAccount = accounts[2];
+    var exchange;
+    
+    return new Promise(function(reject, resolve) {
+      custodian.exchange().then(function(_exchange) {
+        exchange = _exchange;
+        return custodian.give(sellerAccount, 10);
+      }).catch(function(e) {
+        reject(e);
+      }).then(function() {
+        resolve(custodian, exchange, buyerAccount, sellerAccount);
+      });
+    });
+  }
+
+  it("should reserve offered shares with custodian", function() {
+    var startingAvailableBalance = 0;
+    var startingReservedBalance = 0;
+
+    return createTradingAccounts().then(function(custodian, exchange, buyer, seller) {
+      console.log(arguments);
+      return custodian.getAvailableBalance(seller);
+    }).then(function(available) {
+      startingAvailableBalance = available;
+      return custodian.getReservedBalance(seller);
+    }).then(function(reserved) {
+      startingReservedBalance = reserved;
+      return exchange.postOffer(1, 101, 1, {from: seller});
+    }).then(function() {
+      return custodian.getAvailableBalance(seller);
+    }).then(function(available) {
+      var expected = startingAvailableBalance.sub(1);
+      assert.equals(expected.toString(), available.toString());
+      return custodian.getReservedBalance(seller);
+    }).then(function(reserved) {
+      var expected = startingReservedBalance.add(1);
+      assert.equals(expected.toString(), reserved.toString());
+    });
+  });
 })

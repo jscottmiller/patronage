@@ -18,6 +18,14 @@ contract SimpleCustodian is Custodian {
         available[owner] += amount;
     }
 
+    function getAvailableBalance(address owner) returns (uint) {
+        return available[owner];
+    }
+
+    function getReservedBalance(address owner) returns (uint) {
+        return reserved[owner];
+    }
+
     function reserve(address owner, uint amount) {
         if (msg.sender != authorized && msg.sender != address(exchange)) {
             throw;
