@@ -1,161 +1,92 @@
+import {assertThrows} from './helpers.js';
+
 contract('Exchange', function(accounts) {
-  it("should not allow offers priced at zero", async function() {
-    const exchange = Exchange.deployed();
-    let failed = false;
-
-    try {
-      await exchange.postOffer(0, 0, 100);
-    } catch (e) {
-      failed = true;
-    }
-    assert.isTrue(failed);
-  });
-
-  it("should not allow offers for zero shares", function() {
-    var exchange = Exchange.deployed();
-    var failed = false;
-
-    return exchange.postOffer(0, 100, 0).catch(function(e) {
-      failed = true;
-    }).then(function() {
-      assert.isTrue(failed);
-    })
-  });
-
-  it("should not allow bids without enough value", function() {
-    var exchange = Exchange.deployed();
-    var failed = false;
-
-    return exchange.postOffer(0, 100, 1, {value: 50}).catch(function(e) {
-      failed = true;
-    }).then(function() {
-      assert.isTrue(failed);
-    })
-  });
-
-  it("should allow bids to an empty book", function() {
-    var exchange = Exchange.deployed();
-    var biddingAccount = accounts[0];
-    var initialBalance = web3.eth.getBalance(biddingAccount);
-    var initialExchangeBalance = web3.eth.getBalance(exchange.address);
-    var initialBidCount;
-
-    return exchange.getNumberOfOffers.call(0).then(function(count) {
-      initialBidCount = count.toNumber();
-      return exchange.postOffer(0, 100, 1, {from: biddingAccount, value: 100});
-    }).then(function(tx) {
-      var exchangeBalance = web3.eth.getBalance(exchange.address);
-      var expectedExchangeBalance = initialExchangeBalance.add(100).toString();
-      assert.equal(expectedExchangeBalance.toString(), exchangeBalance.toString())
-
-      var transaction = web3.eth.getTransaction(tx);
-      var receipt = web3.eth.getTransactionReceipt(tx);
-      var balance = web3.eth.getBalance(biddingAccount);
-      var gasCost = transaction.gasPrice.mul(receipt.gasUsed);
-      var expectedBiddingBalance = initialBalance.sub(100).sub(gasCost);
-      assert.equal(expectedBiddingBalance.toString(), balance.toString())
-
-      return exchange.getNumberOfOffers.call(0);
-    }).then(function(count) {
-      assert.equal(initialBidCount + 1, count.toNumber());
-    });
-  });
-
-  it("should allow bids to be cancelled, returning funds", function() {
-    var exchange = Exchange.deployed();
-    var biddingAccount = accounts[0];
-    var initialExchangeBalance;
-    var initialBidCount;
-
-    return exchange.getNumberOfOffers.call(0).then(function(count) {
-      initialBidCount = count.toNumber();
-      return exchange.getBalance.call()
-    }).then(function(balance) {
-      initialExchangeBalance = balance.toNumber();
-      return exchange.postOffer(0, 100, 1, {from: biddingAccount, value: 100});
-    }).then(function(tx) {
-      return exchange.cancelOffer(0, 100, 1);
-    }).then(function(tx) {
-      return exchange.getNumberOfOffers.call(0);
-    }).then(function(count) {
-      assert.equal(initialBidCount, count.toNumber());
-      return exchange.getBalance.call();
-    }).then(function(balance) {
-      var returned = balance.toNumber() - initialExchangeBalance;
-      assert.equal(100, returned);
-    });
-  });
-
-  it("should allow cancelled funds to be withdrawn", function() {
-    var exchange = Exchange.deployed();
-    var biddingAccount = accounts[0];
-    var initialBalance = web3.eth.getBalance(biddingAccount);
-    var gasCost;
-
-    return exchange.getBalance.call().then(function(balance) {
-      initialBalance = initialBalance.add(balance);
-      return exchange.postOffer(0, 100, 1, {from: biddingAccount, value: 100})
-    }).then(function(tx) {
-      var transaction = web3.eth.getTransaction(tx);
-      var receipt = web3.eth.getTransactionReceipt(tx);
-      gasCost = transaction.gasPrice.mul(receipt.gasUsed);
-      return exchange.cancelOffer(0, 100, 1);
-    }).then(function(tx) {
-      var transaction = web3.eth.getTransaction(tx);
-      var receipt = web3.eth.getTransactionReceipt(tx);
-      gasCost = gasCost.add(transaction.gasPrice.mul(receipt.gasUsed));
-      return exchange.withdrawal();
-    }).then(function(tx) {
-      var transaction = web3.eth.getTransaction(tx);
-      var receipt = web3.eth.getTransactionReceipt(tx);
-      gasCost = gasCost.add(transaction.gasPrice.mul(receipt.gasUsed));
-
-      var balance = web3.eth.getBalance(biddingAccount);
-      var expected = initialBalance.sub(gasCost);
-      assert.equal(expected.toString(), balance.toString());
-    });
-  })
-
-  function createTradingAccounts() {
-    var custodian = SimpleCustodian.deployed();
-    var sellerAccount = accounts[1];
-    var buyerAccount = accounts[2];
-    var exchange;
-    
-    return new Promise(function(reject, resolve) {
-      custodian.exchange().then(function(_exchange) {
-        exchange = _exchange;
-        return custodian.give(sellerAccount, 10);
-      }).catch(function(e) {
-        reject(e);
-      }).then(function() {
-        resolve(custodian, exchange, buyerAccount, sellerAccount);
-      });
-    });
+  async function createTradingAccounts() {
+    const custodian = SimpleCustodian.deployed();
+    const seller= accounts[1];
+    const buyer= accounts[2];
+    const exchange = Exchange.at(await custodian.exchange());
+    await custodian.give(seller, 10);
+    return {custodian, exchange, buyer, seller};
   }
 
-  it("should reserve offered shares with custodian", function() {
-    var startingAvailableBalance = 0;
-    var startingReservedBalance = 0;
+  it("should not allow offers priced at zero", async function() {
+    const {custodian, exchange, buyer, seller} = await createTradingAccounts();
+    await assertThrows(async () => await exchange.postOffer(0, 0, 100));
+  });
 
-    return createTradingAccounts().then(function(custodian, exchange, buyer, seller) {
-      console.log(arguments);
-      return custodian.getAvailableBalance(seller);
-    }).then(function(available) {
-      startingAvailableBalance = available;
-      return custodian.getReservedBalance(seller);
-    }).then(function(reserved) {
-      startingReservedBalance = reserved;
-      return exchange.postOffer(1, 101, 1, {from: seller});
-    }).then(function() {
-      return custodian.getAvailableBalance(seller);
-    }).then(function(available) {
-      var expected = startingAvailableBalance.sub(1);
-      assert.equals(expected.toString(), available.toString());
-      return custodian.getReservedBalance(seller);
-    }).then(function(reserved) {
-      var expected = startingReservedBalance.add(1);
-      assert.equals(expected.toString(), reserved.toString());
-    });
+  it("should not allow offers for zero shares", async function() {
+    const {custodian, exchange, buyer, seller} = await createTradingAccounts();
+    await assertThrows(async () => await exchange.postOffer(0, 100, 0));
+  });
+
+  it("should not allow bids without enough value", async function() {
+    const {custodian, exchange, buyer, seller} = await createTradingAccounts();
+    await assertThrows(async () => await exchange.postOffer(0, 100, 1, {value: 50}));
+  });
+
+  it("should allow bids to an empty book", async function() {
+    const {custodian, exchange, buyer, seller} = await createTradingAccounts();
+    const initialBalance = web3.eth.getBalance(buyer);
+    const initialExchangeBalance = web3.eth.getBalance(exchange.address);
+    const initialBidCount = await exchange.getNumberOfOffers.call(0);
+    const tx = await exchange.postOffer(0, 100, 1, {from: buyer, value: 100});
+    const exchangeBalance = web3.eth.getBalance(exchange.address);
+    const expectedExchangeBalance = initialExchangeBalance.add(100).toString();
+    assert.equal(expectedExchangeBalance.toString(), exchangeBalance.toString())
+    const transaction = web3.eth.getTransaction(tx);
+    const receipt = web3.eth.getTransactionReceipt(tx);
+    const balance = web3.eth.getBalance(buyer);
+    const gasCost = transaction.gasPrice.mul(receipt.gasUsed);
+    const expectedBiddingBalance = initialBalance.sub(100).sub(gasCost);
+    assert.equal(expectedBiddingBalance.toString(), balance.toString())
+    assert.equal(initialBidCount.add(1).toString(), (await exchange.getNumberOfOffers.call(0)).toNumber());
+  });
+
+  it("should allow bids to be cancelled, returning funds", async function() {
+    const {custodian, exchange, buyer, seller} = await createTradingAccounts();
+    const initialBidCount = await exchange.getNumberOfOffers.call(0);
+    const initialExchangeBalance = await exchange.getBalance.call({from: buyer});
+    await exchange.postOffer(0, 100, 1, {from: buyer, value: 100});
+    await exchange.cancelOffer(0, 100, 1, {from: buyer});
+    const newBidCount = await exchange.getNumberOfOffers.call(0);
+    assert.equal(initialBidCount.toNumber(), newBidCount.toNumber());
+    const newExchangeBalance = await exchange.getBalance.call({from: buyer});
+    const returned = newExchangeBalance.sub(initialExchangeBalance).toNumber();
+    assert.equal(100, returned);
+  });
+
+  it("should allow cancelled funds to be withdrawn", async function() {
+    const {custodian, exchange, buyer, seller} = await createTradingAccounts();
+    const initialExchangeBalance = await exchange.getBalance.call({from: buyer});
+    const initialBalance = web3.eth.getBalance(buyer).add(initialExchangeBalance);
+    const tx1 = await exchange.postOffer(0, 100, 1, {from: buyer, value: 100});
+    const transaction1 = web3.eth.getTransaction(tx1);
+    const receipt1 = web3.eth.getTransactionReceipt(tx1);
+    let gasCost = transaction1.gasPrice.mul(receipt1.gasUsed);
+    const tx2 = await exchange.cancelOffer(0, 100, 1, {from: buyer});
+    const transaction2 = web3.eth.getTransaction(tx2);
+    const receipt2 = web3.eth.getTransactionReceipt(tx2);
+    gasCost = gasCost.add(transaction2.gasPrice.mul(receipt2.gasUsed));
+    const tx3 = await exchange.withdrawal({from: buyer});
+    const transaction3 = web3.eth.getTransaction(tx3);
+    const receipt3 = web3.eth.getTransactionReceipt(tx3);
+    gasCost = gasCost.add(transaction3.gasPrice.mul(receipt3.gasUsed));
+    const balance = web3.eth.getBalance(buyer);
+    const expected = initialBalance.sub(gasCost);
+    assert.equal(expected.toString(), balance.toString());
+  })
+
+  it("should reserve offered shares with custodian", async function() {
+    const {custodian, exchange, buyer, seller} = await createTradingAccounts();
+    const startingAvailableBalance = await custodian.getAvailableBalance.call(seller);
+    const startingReservedBalance = await custodian.getReservedBalance.call(seller);
+    await exchange.postOffer(1, 101, 1, {from: seller});
+    const newAvailableBalance = await custodian.getAvailableBalance.call(seller);
+    const expectedAvailable = startingAvailableBalance.sub(1);
+    assert.equal(expectedAvailable.toString(), newAvailableBalance.toString());
+    const newReservedBalance = await custodian.getReservedBalance.call(seller);
+    const expectedReserved = startingReservedBalance.add(1);
+    assert.equal(expectedReserved.toString(), newReservedBalance.toString());
   });
 })
