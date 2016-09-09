@@ -9,7 +9,7 @@ contract('PatronageRegistry', function(accounts) {
     await assertThrows(async () => {
       await web3.eth.sendTransaction({from: patron, to: address, value: donationAmount});
     });
-    const endingBalance = await web3.eth.getBalance(registrar);
+    const endingBalance = web3.eth.getBalance(registrar);
     assert.equal(startingBalance.toString(), endingBalance.toString());
   });
 
@@ -122,8 +122,8 @@ contract('PatronageRegistry', function(accounts) {
     const payoutAddress = accounts.find(function(a) { 
       return a != registrar && a != shareholders; 
     });
-    const payoutBalance = await web3.eth.getBalance(payoutAddress);
-    const shareholderBalance = await web3.eth.getBalance(shareholders);
+    const payoutBalance = web3.eth.getBalance(payoutAddress);
+    const shareholderBalance = web3.eth.getBalance(shareholders);
     await registry.registerUsername(username, payoutAddress, {from: registrar});
     const patronageAddress = await registry.patronageContractForUsername.call(username);
     const patronage = Patronage.at(patronageAddress);
