@@ -1,13 +1,14 @@
 contract('Exchange', function(accounts) {
-  it("should not allow offers priced at zero", function() {
-    var exchange = Exchange.deployed();
-    var failed = false;
+  it("should not allow offers priced at zero", async function() {
+    const exchange = Exchange.deployed();
+    let failed = false;
 
-    return exchange.postOffer(0, 0, 100).catch(function(e) {
+    try {
+      await exchange.postOffer(0, 0, 100);
+    } catch (e) {
       failed = true;
-    }).then(function() {
-      assert.isTrue(failed);
-    })
+    }
+    assert.isTrue(failed);
   });
 
   it("should not allow offers for zero shares", function() {
