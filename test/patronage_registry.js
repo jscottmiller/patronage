@@ -6,7 +6,7 @@ contract('PatronageRegistry', function(accounts) {
     const registrar = await registry.registrar();
     const other = accounts.find(function(a) { return a != registrar });
     const startingBalance = web3.eth.getBalance(registrar);
-    assertThrows(async () => {
+    await assertThrows(async () => {
       await web3.eth.sendTransaction({from: patron, to: address, value: donationAmount});
     });
     const endingBalance = await web3.eth.getBalance(registrar);
@@ -25,7 +25,7 @@ contract('PatronageRegistry', function(accounts) {
     const registry = PatronageRegistry.deployed();
     const originalRegistrar = await registry.registrar();
     const newRegistrar = accounts.find(function(a) { return a != originalRegistrar });
-    assertThrows(async () => {
+    await assertThrows(async () => {
       await registry.updateRegistrar(newRegistrar, {from: newRegistrar});
     });
     assert.equal(originalRegistrar, await registry.registrar());
@@ -47,7 +47,7 @@ contract('PatronageRegistry', function(accounts) {
     const username = 'user' + Math.floor(10000 * Math.random());
     const registrar = await registry.registrar();
     const other = accounts.find(function(a) { return a != registrar });
-    assertThrows(async () => {
+    await assertThrows(async () => {
       await registry.registerUsername(username, other, {from: other});
     });
   });
@@ -62,7 +62,7 @@ contract('PatronageRegistry', function(accounts) {
     const patronage = Patronage.at(patronageAddress);
     assert.equal(payoutAddress, await patronage.payoutAddress());
     const other = accounts.find(function(a) { return [registrar, payoutAddress].indexOf(a) == -1; });
-    assertThrows(async () => {
+    await assertThrows(async () => {
       await registry.registerUsername(username, other, {from: registrar});
     });
     assert.equal(payoutAddress, await patronage.payoutAddress());
@@ -96,7 +96,7 @@ contract('PatronageRegistry', function(accounts) {
     const other = accounts.find(function(a) { 
       return [registrar, payoutAddress].indexOf(a) == -1;
     });
-    assertThrows(async () => {
+    await assertThrows(async () => {
       await patronage.updatePayoutAddress(other, {from: registrar});
     });
     assert.equal(payoutAddress, await patronage.payoutAddress());
@@ -110,7 +110,7 @@ contract('PatronageRegistry', function(accounts) {
     await registry.registerUsername(username, payoutAddress, {from: registrar});
     const patronageAddress = await registry.patronageContractForUsername.call(username);
     const patronage = Patronage.at(patronageAddress);
-    assertThrows(async () => patronage.withdrawal());
+    await assertThrows(async () => patronage.withdrawal());
   });
 
   it("should pay balance to shareholders and owner", async function() {
