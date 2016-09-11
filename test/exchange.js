@@ -10,6 +10,12 @@ contract('Exchange', function(accounts) {
     return {custodian, exchange, buyer, seller};
   }
 
+  function getGasCost(tx) {
+    const transaction = web3.eth.getTransaction(tx);
+    const receipt = web3.eth.getTransactionReceipt(tx);
+    return transaction.gasPrice.mul(receipt.gasUsed);
+  }
+
   it("should not allow offers priced at zero", async function() {
     const {custodian, exchange, buyer, seller} = await createTradingAccounts();
     await assertThrows(async () => await exchange.postOffer(0, 0, 100));
@@ -34,10 +40,8 @@ contract('Exchange', function(accounts) {
     const exchangeBalance = web3.eth.getBalance(exchange.address);
     const expectedExchangeBalance = initialExchangeBalance.add(100).toString();
     assert.equal(expectedExchangeBalance.toString(), exchangeBalance.toString())
-    const transaction = web3.eth.getTransaction(tx);
-    const receipt = web3.eth.getTransactionReceipt(tx);
+    const gasCost = getGasCost(tx);
     const balance = web3.eth.getBalance(buyer);
-    const gasCost = transaction.gasPrice.mul(receipt.gasUsed);
     const expectedBiddingBalance = initialBalance.sub(100).sub(gasCost);
     assert.equal(expectedBiddingBalance.toString(), balance.toString())
     assert.equal(initialBidCount.add(1).toString(), (await exchange.getNumberOfOffers.call(0)).toNumber());
@@ -61,17 +65,11 @@ contract('Exchange', function(accounts) {
     const initialExchangeBalance = await exchange.getBalance.call({from: buyer});
     const initialBalance = web3.eth.getBalance(buyer).add(initialExchangeBalance);
     const tx1 = await exchange.postOffer(0, 100, 1, {from: buyer, value: 100});
-    const transaction1 = web3.eth.getTransaction(tx1);
-    const receipt1 = web3.eth.getTransactionReceipt(tx1);
-    let gasCost = transaction1.gasPrice.mul(receipt1.gasUsed);
+    let gasCost = getGasCost(tx1);
     const tx2 = await exchange.cancelOffer(0, 100, 1, {from: buyer});
-    const transaction2 = web3.eth.getTransaction(tx2);
-    const receipt2 = web3.eth.getTransactionReceipt(tx2);
-    gasCost = gasCost.add(transaction2.gasPrice.mul(receipt2.gasUsed));
+    gasCost = gasCost.add(getGasCost(tx2));
     const tx3 = await exchange.withdrawal({from: buyer});
-    const transaction3 = web3.eth.getTransaction(tx3);
-    const receipt3 = web3.eth.getTransactionReceipt(tx3);
-    gasCost = gasCost.add(transaction3.gasPrice.mul(receipt3.gasUsed));
+    gasCost = gasCost.add(getGasCost(tx3));
     const balance = web3.eth.getBalance(buyer);
     const expected = initialBalance.sub(gasCost);
     assert.equal(expected.toString(), balance.toString());
