@@ -38,40 +38,35 @@ contract Exchange {
             custodian.reserve(msg.sender, shares);
         }
         uint32 remainingShares = shares;
-        int16 top = side == Side.Ask ? topBidIndex : topAskIndex;
-        if (top != -1) {
-            int16 index = top;
-            Offer next = offers[uint(top)];
+        int16 index = side == Side.Ask ? topBidIndex : topAskIndex;
+        int16 parentIndex = -1;
+        while (index != -1 && remainingShares > 0) {
+            Offer next = offers[uint(index)];
             bool matches = (
                 (side == Side.Bid && next.price <= price) ||
                 (side == Side.Ask && next.price >= price)
             );
-            while (next.active && matches) {
-                address seller = side == Side.Bid ? next.owner : msg.sender;
-                address buyer = side == Side.Bid ? msg.sender : next.owner;
-                if (next.shares <= remainingShares) {
-                    balances[seller] = next.shares * next.price;
-                    remainingShares -= next.shares;
-                    offers[uint(index)].active = false;
-                    custodian.unreserve(seller, next.shares);
-                    custodian.transfer(seller, buyer, next.shares);
-                } else {
-                    balances[seller] = remainingShares * next.price;
-                    offers[uint(index)].shares = next.shares - remainingShares;
-                    remainingShares = 0;
-                    custodian.unreserve(seller, remainingShares);
-                    custodian.transfer(seller, buyer, remainingShares);
-                }
-                index = next.nextIndex;
-                next = offers[uint(index)];
-                matches = (
-                    (side == Side.Bid && next.price <= price) ||
-                    (side == Side.Ask && next.price >= price)
-                );
+            if (!next.active || !matches) {
+                break;
             }
-        }
-        if (remainingShares < 0) {
-            throw;
+            address seller = side == Side.Bid ? next.owner : msg.sender;
+            address buyer = side == Side.Bid ? msg.sender : next.owner;
+            if (next.shares <= remainingShares) {
+                balances[seller] += next.shares * next.price;
+                remainingShares -= next.shares;
+                offers[uint(index)].active = false;
+                spliceOffer(next.side, parentIndex, next.nextIndex);
+                custodian.unreserve(seller, next.shares);
+                custodian.transfer(seller, buyer, next.shares);
+            } else {
+                balances[seller] += remainingShares * next.price;
+                offers[uint(index)].shares = next.shares - remainingShares;
+                custodian.unreserve(seller, remainingShares);
+                custodian.transfer(seller, buyer, remainingShares);
+                remainingShares = 0;
+            }
+            parentIndex = index;
+            index = next.nextIndex;
         }
         if (remainingShares == 0) {
             return;
@@ -146,15 +141,7 @@ contract Exchange {
             offers[uint(currentIndex)].shares -= shares;
         } else {
             matchingOffer.active = false;
-            if (parentIndex != -1) {
-                offers[uint(parentIndex)].nextIndex = matchingOffer.nextIndex;
-            } else {
-                if (side == Side.Bid) {
-                    topBidIndex = matchingOffer.nextIndex;
-                } else {
-                    topAskIndex = matchingOffer.nextIndex;
-                }
-            }
+            spliceOffer(side, parentIndex, matchingOffer.nextIndex);
         }
         if (side == Side.Bid) {
             balances[msg.sender] += price * shares;
@@ -176,6 +163,18 @@ contract Exchange {
 
     function getBalance() returns (uint) {
         return balances[msg.sender];
+    }
+
+    function spliceOffer(Side side, int16 parentIndex, int16 nextIndex) private {
+        if (parentIndex != -1) {
+            offers[uint(parentIndex)].nextIndex = nextIndex;
+        } else {
+            if (side == Side.Bid) {
+                topBidIndex = nextIndex;
+            } else {
+                topAskIndex = nextIndex;
+            }
+        }
     }
 
     function() {
