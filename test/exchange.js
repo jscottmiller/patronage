@@ -41,6 +41,20 @@ contract('Exchange', function(accounts) {
     await assertThrows(async () => await exchange.postOffer(0, 100, 1, {value: 50}));
   });
 
+  it("should reserve shares for accepted asks", async function() {
+    const {custodian, exchange, buyer, seller} = await createTradingAccounts();
+    const initialAskCount = await exchange.getNumberOfOffers.call(1);
+    const initialReservedShares = await custodian.getReservedBalance.call(seller);
+    const initialAvailableShares = await custodian.getAvailableBalance.call(seller);
+    await exchange.postOffer(1, 100, 1, {from: seller});
+    const newReservedShares = await custodian.getReservedBalance.call(seller);
+    const newAvailableShares = await custodian.getAvailableBalance.call(seller);
+    const availableDifference = newAvailableShares.sub(initialAvailableShares);
+    const reservedDifference = newReservedShares.sub(initialReservedShares);
+    assert.equal(-1, availableDifference.toNumber());
+    assert.equal(1, reservedDifference.toNumber());
+  });
+
   it("should allow bids to an empty book", async function() {
     const {custodian, exchange, buyer, seller} = await createTradingAccounts();
     const initialBalance = web3.eth.getBalance(buyer);
@@ -68,6 +82,18 @@ contract('Exchange', function(accounts) {
     const newExchangeBalance = await exchange.getBalance.call({from: buyer});
     const returned = newExchangeBalance.sub(initialExchangeBalance).toNumber();
     assert.equal(100, returned);
+  });
+
+  it("should allow sells to be cancelled, returning funds", async function() {
+    const {custodian, exchange, buyer, seller} = await createTradingAccounts();
+    const initialAskCount = await exchange.getNumberOfOffers.call(1);
+    const initialShares = await custodian.getAvailableBalance.call(seller);
+    await exchange.postOffer(1, 100, 1, {from: seller});
+    await exchange.cancelOffer(1, 100, 1, {from: seller});
+    const newAskCount = await exchange.getNumberOfOffers.call(1);
+    assert.equal(initialAskCount.toNumber(), newAskCount.toNumber());
+    const newShares = await custodian.getAvailableBalance.call(seller);
+    assert.equal(initialShares.toString(), newShares.toString());
   });
 
   it("should allow cancelled funds to be withdrawn", async function() {
