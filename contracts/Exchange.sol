@@ -110,6 +110,15 @@ contract Exchange {
         return count;
     }
 
+    function getTopOffer(Side side) returns (uint price, uint32 shares) {
+        int16 currentIndex = side == Side.Bid ? topBidIndex : topAskIndex;
+        if (currentIndex == -1) {
+            return (0, 0);
+        }
+        price = offers[uint(currentIndex)].price;
+        shares = offers[uint(currentIndex)].shares;
+    }
+
     function cancelOffer(Side side, uint price, uint32 shares) {
         bool found = false;
         int16 parentIndex = -1;
