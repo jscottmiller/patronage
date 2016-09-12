@@ -8,11 +8,8 @@ contract('Exchange', function(accounts) {
     const exchange = Exchange.at(await custodian.exchange());
     await custodian.give(seller, 10);
     for (let side = 0; side < 2; side++) {
-      while (true) {
+      while ((await exchange.getNumberOfOffers.call(side)) > 0) {
         const [price, shares] = await exchange.getTopOffer.call(side);
-        if (shares.toNumber() == 0) {
-          break;
-        }
         const sender = side == 0 ? buyer : seller;
         await exchange.cancelOffer(side, price, shares, {from: sender});
       }

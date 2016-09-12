@@ -108,7 +108,7 @@ contract Exchange {
     function getTopOffer(Side side) returns (uint price, uint32 shares) {
         int16 currentIndex = side == Side.Bid ? topBidIndex : topAskIndex;
         if (currentIndex == -1) {
-            return (0, 0);
+            throw;
         }
         price = offers[uint(currentIndex)].price;
         shares = offers[uint(currentIndex)].shares;
