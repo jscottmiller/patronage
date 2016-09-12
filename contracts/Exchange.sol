@@ -106,7 +106,15 @@ contract Exchange {
     }
 
     function getTopOffer(Side side) returns (uint price, uint32 shares) {
+        return getOffer(side, 0);
+    }
+
+    function getOffer(Side side, uint depth) returns (uint price, uint32 shares) {
         int16 currentIndex = side == Side.Bid ? topBidIndex : topAskIndex;
+        while (currentIndex != -1 && depth > 0) {
+            currentIndex = offers[uint(currentIndex)].nextIndex;
+            depth--;
+        }
         if (currentIndex == -1) {
             throw;
         }
