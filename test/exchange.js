@@ -123,8 +123,6 @@ contract('Exchange', function(accounts) {
 
   it("should match buyer with seller for exact amounts, clearing exchange", async function() {
     const {custodian, exchange, buyer, seller} = await createTradingAccounts();
-    const initialAskCount = await exchange.getNumberOfOffers.call(1);
-    const initialBidCount = await exchange.getNumberOfOffers.call(0);
     const sellerStartingShares = await custodian.getAvailableBalance.call(seller);
     const buyerStartingShares = await custodian.getAvailableBalance.call(buyer);
     const sellerStartingBalance = await exchange.getBalance.call({from: seller});
@@ -137,8 +135,33 @@ contract('Exchange', function(accounts) {
     const buyerEndingBalance = await exchange.getBalance.call({from: buyer});
     const newAskCount = await exchange.getNumberOfOffers.call(1);
     const newBidCount = await exchange.getNumberOfOffers.call(0);
-    assert.equal(0, initialAskCount.sub(newAskCount).toNumber());
-    assert.equal(0, initialBidCount.sub(newBidCount).toNumber());
+    assert.equal(0, newAskCount.toNumber());
+    assert.equal(0, newBidCount.toNumber());
+    assert.equal(buyerStartingBalance.toString(), buyerEndingBalance.toString());
+    assert.equal(sellerStartingBalance.add(101).toString(), sellerEndingBalance.toString());
+    assert.equal(buyerStartingShares.add(1).toString(), buyerEndingShares.toString());
+    assert.equal(sellerStartingShares.sub(1).toString(), sellerEndingShares.toString());
+  });
+
+  it("should match large buyer with small seller, leaving excess on the exchange", async function() {
+    const {custodian, exchange, buyer, seller} = await createTradingAccounts();
+    const sellerStartingShares = await custodian.getAvailableBalance.call(seller);
+    const buyerStartingShares = await custodian.getAvailableBalance.call(buyer);
+    const sellerStartingBalance = await exchange.getBalance.call({from: seller});
+    const buyerStartingBalance = await exchange.getBalance.call({from: buyer});
+    const sellTx = await exchange.postOffer(1, 101, 1, {from: seller});
+    const buyTx = await exchange.postOffer(0, 101, 2, {from: buyer, value: 202});
+    const sellerEndingShares = await custodian.getAvailableBalance.call(seller);
+    const buyerEndingShares = await custodian.getAvailableBalance.call(buyer);
+    const sellerEndingBalance = await exchange.getBalance.call({from: seller});
+    const buyerEndingBalance = await exchange.getBalance.call({from: buyer});
+    const newAskCount = await exchange.getNumberOfOffers.call(1);
+    const newBidCount = await exchange.getNumberOfOffers.call(0);
+    const [topBidPrice, topBidShares] = await exchange.getTopOffer.call(0);
+    assert.equal(101, topBidPrice);
+    assert.equal(1, topBidShares);
+    assert.equal(0, newAskCount.toNumber());
+    assert.equal(1, newBidCount.toNumber());
     assert.equal(buyerStartingBalance.toString(), buyerEndingBalance.toString());
     assert.equal(sellerStartingBalance.add(101).toString(), sellerEndingBalance.toString());
     assert.equal(buyerStartingShares.add(1).toString(), buyerEndingShares.toString());
