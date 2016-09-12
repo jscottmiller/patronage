@@ -23,7 +23,7 @@ contract RevenueSharing is Custodian {
         owner = msg.sender;
         exchange = new Exchange();
         registry = new PatronageRegistry(address(this));
-        shareholders[0] = Shareholder(true, -1, maximumShareholders, owner);
+        shareholders[0] = Shareholder(true, -1, totalShares, owner);
         head = 0;
     }
 
