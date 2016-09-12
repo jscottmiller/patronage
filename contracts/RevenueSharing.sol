@@ -33,11 +33,9 @@ contract RevenueSharing is Custodian {
             throw;
         }
         dividendBalances[msg.sender] = 0;
-        if (msg.sender.send(amount)) {
-            return true;
+        if (!msg.sender.send(amount)) {
+            throw
         }
-        dividendBalances[msg.sender] = amount;
-        return false;
     }
 
     function allocateDividends() {
