@@ -1,2 +1,8 @@
-Exchange 
+Revenue Sharing contract
+* Testing
+* Ability to change revenue split (voting?)
+
+Exchange contract
+* More testing on trading scenarios
+* Decide on need for exchange admin
 * TTL on offers
