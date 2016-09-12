@@ -137,6 +137,7 @@ contract('Exchange', function(accounts) {
     sellerSharesChange, 
     buyerBalanceChange, 
     sellerBalanceChange, 
+    exchangeBalanceChange,
     remainingBids, 
     remainingAsks
   }) {
@@ -145,6 +146,7 @@ contract('Exchange', function(accounts) {
     const buyerStartingShares = await custodian.getAvailableBalance.call(buyer);
     const sellerStartingBalance = await exchange.getBalance.call({from: seller});
     const buyerStartingBalance = await exchange.getBalance.call({from: buyer});
+    const exchangeStartingBalance = web3.eth.getBalance(exchange.address);
     for (let [side, price, shares] of offers) {
       const meta = {
         from: side == 0 ? buyer : seller,
@@ -156,12 +158,14 @@ contract('Exchange', function(accounts) {
     const buyerEndingShares = await custodian.getAvailableBalance.call(buyer);
     const sellerEndingBalance = await exchange.getBalance.call({from: seller});
     const buyerEndingBalance = await exchange.getBalance.call({from: buyer});
+    const exchangeEndingBalance = web3.eth.getBalance(exchange.address);
     const newBidCount = await exchange.getNumberOfOffers.call(0);
     const newAskCount = await exchange.getNumberOfOffers.call(1);
     assert.equal(buyerSharesChange, buyerEndingShares.sub(buyerStartingShares).toNumber());
     assert.equal(sellerSharesChange, sellerEndingShares.sub(sellerStartingShares).toNumber());
     assert.equal(buyerBalanceChange, buyerEndingBalance.sub(buyerStartingBalance).toNumber());
     assert.equal(sellerBalanceChange, sellerEndingBalance.sub(sellerStartingBalance).toNumber());
+    assert.equal(exchangeBalanceChange, exchangeEndingBalance.sub(exchangeStartingBalance).toNumber());
     if (remainingBids) {
       assert.equal(remainingBids.length, newBidCount.toNumber());
       let depth = 0
@@ -192,7 +196,8 @@ contract('Exchange', function(accounts) {
       buyerSharesChange: 1,
       sellerSharesChange: -1,
       buyerBalanceChange: 0,
-      sellerBalanceChange: 101
+      sellerBalanceChange: 101,
+      exchangeBalanceChange: 101
     });
   });
 
@@ -202,7 +207,8 @@ contract('Exchange', function(accounts) {
       buyerSharesChange: 1,
       sellerSharesChange: -1,
       buyerBalanceChange: 0,
-      sellerBalanceChange: 101
+      sellerBalanceChange: 101,
+      exchangeBalanceChange: 101
     });
   });
 
@@ -213,6 +219,7 @@ contract('Exchange', function(accounts) {
       sellerSharesChange: -1,
       buyerBalanceChange: 0,
       sellerBalanceChange: 101,
+      exchangeBalanceChange: 202,
       remainingBids: [[101, 1]]
     });
   });
@@ -224,6 +231,7 @@ contract('Exchange', function(accounts) {
       sellerSharesChange: -2,
       buyerBalanceChange: 0,
       sellerBalanceChange: 101,
+      exchangeBalanceChange: 101,
       remainingAsks: [[101, 1]]
     });
   });
