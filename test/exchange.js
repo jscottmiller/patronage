@@ -121,6 +121,16 @@ contract('Exchange', function(accounts) {
     assert.equal(expectedReserved.toString(), newReservedBalance.toString());
   });
 
+  it("should not match a low buyer with high seller", async function() {
+    const {custodian, exchange, buyer, seller} = await createTradingAccounts();
+    const sellTx = await exchange.postOffer(1, 101, 1, {from: seller});
+    const buyTx = await exchange.postOffer(0, 100, 1, {from: buyer, value: 100});
+    const newAskCount = await exchange.getNumberOfOffers.call(1);
+    const newBidCount = await exchange.getNumberOfOffers.call(0);
+    assert.equal(1, newAskCount.toNumber());
+    assert.equal(1, newBidCount.toNumber());
+  });
+
   it("should match buyer with seller for exact amounts, clearing exchange", async function() {
     const {custodian, exchange, buyer, seller} = await createTradingAccounts();
     const sellerStartingShares = await custodian.getAvailableBalance.call(seller);
