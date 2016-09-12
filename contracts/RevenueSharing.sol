@@ -51,6 +51,9 @@ contract RevenueSharing is Custodian {
     }
 
     function transfer(address oldOwner, address newOwner, uint shares) {
+        if (msg.sender != oldOwner && msg.sender != address(exchange) {
+            throw;
+        }
         var (ownerIndex, ownerParentIndex) = findShareholder(oldOwner);
         if (ownerIndex == -1) {
             throw;
