@@ -131,7 +131,7 @@ contract('Exchange', function(accounts) {
     assert.equal(1, newBidCount.toNumber());
   });
 
-  async function checkTrade({
+  async function checkTrades({
     offers,
     buyerSharesChange, 
     sellerSharesChange, 
@@ -191,7 +191,7 @@ contract('Exchange', function(accounts) {
   }
 
   it("should match buyer with seller for exact amounts, clearing exchange", async function() {
-    await checkTrade({
+    await checkTrades({
       offers: [[0, 101, 1], [1, 101, 1]],
       buyerSharesChange: 1,
       sellerSharesChange: -1,
@@ -202,7 +202,7 @@ contract('Exchange', function(accounts) {
   });
 
   it("should match seller with buyer for exact amounts, clearing exchange", async function() {
-    await checkTrade({
+    await checkTrades({
       offers: [[1, 101, 1], [0, 101, 1]],
       buyerSharesChange: 1,
       sellerSharesChange: -1,
@@ -213,7 +213,7 @@ contract('Exchange', function(accounts) {
   });
 
   it("should match large buyer with small seller, leaving excess on the exchange", async function() {
-    await checkTrade({
+    await checkTrades({
       offers: [[1, 101, 1], [0, 101, 2]],
       buyerSharesChange: 1,
       sellerSharesChange: -1,
@@ -225,7 +225,7 @@ contract('Exchange', function(accounts) {
   });
 
   it("should match large seller with small buyer, leaving excess on the exchange", async function() {
-    await checkTrade({
+    await checkTrades({
       offers: [[0, 101, 1], [1, 101, 2]],
       buyerSharesChange: 1,
       sellerSharesChange: -2,
