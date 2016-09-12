@@ -131,50 +131,100 @@ contract('Exchange', function(accounts) {
     assert.equal(1, newBidCount.toNumber());
   });
 
-  it("should match buyer with seller for exact amounts, clearing exchange", async function() {
+  async function checkTrade({
+    offers,
+    buyerSharesChange, 
+    sellerSharesChange, 
+    buyerBalanceChange, 
+    sellerBalanceChange, 
+    remainingBids, 
+    remainingAsks
+  }) {
     const {custodian, exchange, buyer, seller} = await createTradingAccounts();
     const sellerStartingShares = await custodian.getAvailableBalance.call(seller);
     const buyerStartingShares = await custodian.getAvailableBalance.call(buyer);
     const sellerStartingBalance = await exchange.getBalance.call({from: seller});
     const buyerStartingBalance = await exchange.getBalance.call({from: buyer});
-    const sellTx = await exchange.postOffer(1, 101, 1, {from: seller});
-    const buyTx = await exchange.postOffer(0, 101, 1, {from: buyer, value: 101});
+    for (let [side, price, shares] of offers) {
+      const meta = {
+        from: side == 0 ? buyer : seller,
+        value: side == 0 ? price * shares : 0
+      };
+      await exchange.postOffer(side, price, shares, meta);
+    }
     const sellerEndingShares = await custodian.getAvailableBalance.call(seller);
     const buyerEndingShares = await custodian.getAvailableBalance.call(buyer);
     const sellerEndingBalance = await exchange.getBalance.call({from: seller});
     const buyerEndingBalance = await exchange.getBalance.call({from: buyer});
-    const newAskCount = await exchange.getNumberOfOffers.call(1);
     const newBidCount = await exchange.getNumberOfOffers.call(0);
-    assert.equal(0, newAskCount.toNumber());
-    assert.equal(0, newBidCount.toNumber());
-    assert.equal(buyerStartingBalance.toString(), buyerEndingBalance.toString());
-    assert.equal(sellerStartingBalance.add(101).toString(), sellerEndingBalance.toString());
-    assert.equal(buyerStartingShares.add(1).toString(), buyerEndingShares.toString());
-    assert.equal(sellerStartingShares.sub(1).toString(), sellerEndingShares.toString());
+    const newAskCount = await exchange.getNumberOfOffers.call(1);
+    assert.equal(buyerSharesChange, buyerEndingShares.sub(buyerStartingShares).toNumber());
+    assert.equal(sellerSharesChange, sellerEndingShares.sub(sellerStartingShares).toNumber());
+    assert.equal(buyerBalanceChange, buyerEndingBalance.sub(buyerStartingBalance).toNumber());
+    assert.equal(sellerBalanceChange, sellerEndingBalance.sub(sellerStartingBalance).toNumber());
+    if (remainingBids) {
+      assert.equal(remainingBids.length, newBidCount.toNumber());
+      let depth = 0
+      for (let [price, shares] of remainingBids) {
+        const [bookPrice, bookShares] = await exchange.getOffer.call(0, depth++);
+        assert.equal(price, bookPrice.toNumber());
+        assert.equal(shares, bookShares.toNumber());
+      }
+    } else {
+      assert.equal(0, newBidCount.toNumber());
+    }
+    if (remainingAsks) {
+      assert.equal(remainingAsks.length, newAskCount.toNumber());
+      let depth = 0
+      for (let [price, shares] of remainingAsks) {
+        const [bookPrice, bookShares] = await exchange.getOffer.call(1, depth++);
+        assert.equal(price, bookPrice.toNumber());
+        assert.equal(shares, bookShares.toNumber());
+      }
+    } else {
+      assert.equal(0, newAskCount.toNumber());
+    }
+  }
+
+  it("should match buyer with seller for exact amounts, clearing exchange", async function() {
+    await checkTrade({
+      offers: [[0, 101, 1], [1, 101, 1]],
+      buyerSharesChange: 1,
+      sellerSharesChange: -1,
+      buyerBalanceChange: 0,
+      sellerBalanceChange: 101
+    });
+  });
+
+  it("should match seller with buyer for exact amounts, clearing exchange", async function() {
+    await checkTrade({
+      offers: [[1, 101, 1], [0, 101, 1]],
+      buyerSharesChange: 1,
+      sellerSharesChange: -1,
+      buyerBalanceChange: 0,
+      sellerBalanceChange: 101
+    });
   });
 
   it("should match large buyer with small seller, leaving excess on the exchange", async function() {
-    const {custodian, exchange, buyer, seller} = await createTradingAccounts();
-    const sellerStartingShares = await custodian.getAvailableBalance.call(seller);
-    const buyerStartingShares = await custodian.getAvailableBalance.call(buyer);
-    const sellerStartingBalance = await exchange.getBalance.call({from: seller});
-    const buyerStartingBalance = await exchange.getBalance.call({from: buyer});
-    const sellTx = await exchange.postOffer(1, 101, 1, {from: seller});
-    const buyTx = await exchange.postOffer(0, 101, 2, {from: buyer, value: 202});
-    const sellerEndingShares = await custodian.getAvailableBalance.call(seller);
-    const buyerEndingShares = await custodian.getAvailableBalance.call(buyer);
-    const sellerEndingBalance = await exchange.getBalance.call({from: seller});
-    const buyerEndingBalance = await exchange.getBalance.call({from: buyer});
-    const newAskCount = await exchange.getNumberOfOffers.call(1);
-    const newBidCount = await exchange.getNumberOfOffers.call(0);
-    const [topBidPrice, topBidShares] = await exchange.getTopOffer.call(0);
-    assert.equal(101, topBidPrice);
-    assert.equal(1, topBidShares);
-    assert.equal(0, newAskCount.toNumber());
-    assert.equal(1, newBidCount.toNumber());
-    assert.equal(buyerStartingBalance.toString(), buyerEndingBalance.toString());
-    assert.equal(sellerStartingBalance.add(101).toString(), sellerEndingBalance.toString());
-    assert.equal(buyerStartingShares.add(1).toString(), buyerEndingShares.toString());
-    assert.equal(sellerStartingShares.sub(1).toString(), sellerEndingShares.toString());
+    await checkTrade({
+      offers: [[1, 101, 1], [0, 101, 2]],
+      buyerSharesChange: 1,
+      sellerSharesChange: -1,
+      buyerBalanceChange: 0,
+      sellerBalanceChange: 101,
+      remainingBids: [[101, 1]]
+    });
+  });
+
+  it("should match large seller with small buyer, leaving excess on the exchange", async function() {
+    await checkTrade({
+      offers: [[0, 101, 1], [1, 101, 2]],
+      buyerSharesChange: 1,
+      sellerSharesChange: -2,
+      buyerBalanceChange: 0,
+      sellerBalanceChange: 101,
+      remainingAsks: [[101, 1]]
+    });
   });
 })
